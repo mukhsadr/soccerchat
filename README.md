@@ -1,9 +1,17 @@
-# soccerchat
+# SoccerChat
 
 ## Description
 User can ask uploaded-soccer-game-video-clip.
 
 Description from Visual Language Model fine-tuned for soccer data.
+
+High risk item/feature: Assessing the model's performance by computing agreement scores.
+
+## Test Run Images
+
+![Test validation next-token plot](test%20va.png)
+
+![Test run output](testrun.png)
 
 ## De-Risking Checklist (Dr. Landman Style)
 
