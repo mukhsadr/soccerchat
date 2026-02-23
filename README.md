@@ -1,12 +1,17 @@
 # soccerchat
 
-SoccerChat project starter.
+## Description
+User can ask uploaded-soccer-game-video-clip.
+
+Description from Visual Language Model fine-tuned for soccer data.
 
 ## De-Risking Checklist (Dr. Landman Style)
 
 - [x] Model runs end-to-end on a small sample
 - [x] Inference on test split produces outputs without errors
 - [x] Basic evaluation metrics computed (e.g., token F1, ROUGE-L)
+- [x] Sanity check: F1 scoring = sementic/token overlapping/matching pred vs gt
+- [x] Likert Scaling: 1=StrDsgr .. 5=StrAgr
 - [x] GUI loads and accepts video input
 - [ ] Full test split evaluation completed
 - [ ] Error analysis on worst cases
@@ -18,6 +23,7 @@ SoccerChat project starter.
 |---|---:|---:|---|
 | Run model end-to-end | 2 | 3 | ✅ De-risked |
 | Test split inference + evaluation | 3 | 4 | ✅ De-risked |
+| Agreement scores for evaluation | 4 | 5 | ⚠️ High risk |
 | GUI for video + chat | 3 | 3 | ✅ De-risked |
 | Large-scale evaluation | 4 | 4 | ⏳ Pending |
 | Error analysis & mitigation | 3 | 4 | ⏳ Pending |
