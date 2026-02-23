@@ -1,17 +1,26 @@
 # SoccerChat
 
 ## Description
-User can ask uploaded-soccer-game-video-clip.
+SoccerChat lets users ask questions about uploaded soccer game video clips.
 
-Description from Visual Language Model fine-tuned for soccer data.
+Target audience: soccer fans and broadcasters who want extra info or description.
 
-High risk item/feature: Assessing the model's performance by computing agreement scores.
+It uses a Visual Language Model fine-tuned for soccer data.
+
+High-risk item/feature: assessing model performance by computing agreement scores.
 
 ## Test Run Images
 
-Test run first: we ran test va, which predicts the next token.
+Test run first: we ran `test va`, which predicts the next token.
 
 ![Test validation next-token plot](test%20va.png)
+
+## Error Analysis (Start Here)
+
+- Review the 20 worst examples (lowest F1/ROUGE-L or judge score)
+- Tag each error type (missed action, wrong actor, hallucinated event, too vague/too long, timing error)
+- Count the most frequent error types
+- Summarize 2–3 findings for improvement
 
 ![Test run output](testrun.png)
 
@@ -20,8 +29,8 @@ Test run first: we ran test va, which predicts the next token.
 - [x] Model runs end-to-end on a small sample
 - [x] Inference on test split produces outputs without errors
 - [x] Basic evaluation metrics computed (e.g., token F1, ROUGE-L)
-- [x] Sanity check: F1 scoring = sementic/token overlapping/matching pred vs gt
-- [x] Likert Scaling: 1=StrDsgr .. 5=StrAgr
+- [x] Sanity check: F1 scoring = semantic/token overlap/matching pred vs GT
+- [x] Likert scaling: 1 = Strongly Disagree ... 5 = Strongly Agree
 - [x] GUI loads and accepts video input
 - [ ] Full test split evaluation completed
 - [ ] Error analysis on worst cases
