@@ -9,6 +9,8 @@ High risk item/feature: Assessing the model's performance by computing agreement
 
 ## Test Run Images
 
+Test run first: we ran test va, which predicts the next token.
+
 ![Test validation next-token plot](test%20va.png)
 
 ![Test run output](testrun.png)
