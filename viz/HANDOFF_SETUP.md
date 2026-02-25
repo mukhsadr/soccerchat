@@ -46,7 +46,7 @@ ollama pull llama3.2:3b
 ```bash
 cd /mnt/c/Users/adams/Documents/Projects/soccerchat
 source .venv/bin/activate
-python soccer_app_gui.py
+python viz/soccer_app_gui.py
 ```
 
 Open:

@@ -67,7 +67,7 @@ Test run first: we ran `test va`, which predicts the next token.
 Run:
 
 ```bash
-python soccer_app_gui.py
+python viz/soccer_app_gui.py
 ```
 
 Open:
@@ -76,4 +76,4 @@ Open:
 
 Handoff/build notes for another assistant:
 
-- `HANDOFF_SETUP.md`
+- `viz/HANDOFF_SETUP.md`
