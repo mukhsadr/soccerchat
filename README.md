@@ -61,3 +61,19 @@ Test run first: we ran `test va`, which predicts the next token.
 | GUI for video + chat | 3 | 3 | ✅ De-risked |
 | Large-scale evaluation | 4 | 4 | ⏳ Pending |
 | Error analysis & mitigation | 3 | 4 | ⏳ Pending |
+
+## Eval GUI (New)
+
+Run:
+
+```bash
+python soccer_app_gui.py
+```
+
+Open:
+
+- `http://127.0.0.1:7862`
+
+Handoff/build notes for another assistant:
+
+- `HANDOFF_SETUP.md`
