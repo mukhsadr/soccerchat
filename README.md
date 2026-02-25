@@ -9,6 +9,21 @@ It uses a Visual Language Model fine-tuned for soccer data.
 
 High-risk item/feature: assessing model performance by computing agreement scores.
 
+## Audience & Value
+
+### Sports Media & Broadcast Companies
+- Reduce manual annotation cost.
+- Accelerate highlight publishing with a fine-tuned, domain-specific VLM trained on soccer events.
+
+### Soccer Analytics Companies
+- Bridge structured tracking data with explainable multimodal reasoning.
+
+### AI Research Community (Academic)
+- Demonstrate domain adaptation of a 7B multimodal foundation model to a specialized soccer reasoning task using about 85k examples and LoRA.
+
+### Primary Audience (High Value)
+- Sports media and broadcast companies.
+
 ## Test Run Images
 
 Test run first: we ran `test va`, which predicts the next token.
