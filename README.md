@@ -67,7 +67,7 @@ Test run first: we ran `test va`, which predicts the next token.
 Run:
 
 ```bash
-python viz/soccer_app_gui.py
+python run_soccer_table_gui.py
 ```
 
 Open:
@@ -77,3 +77,35 @@ Open:
 Handoff/build notes for another assistant:
 
 - `viz/HANDOFF_SETUP.md`
+
+## Score 100-Pred File
+
+If you start from raw prediction file (`response` + `pred`), create scored JSONL first:
+
+```bash
+python viz/soccer/score_preds_jsonl.py \
+  --input SoccerChat_valid_xfoul_abs_preds_100.jsonl \
+  --output viz/SoccerChat_valid_xfoul_abs_preds_100_scored.jsonl \
+  --group valid_preds_100
+```
+
+One-command run (100 + LLM judge + v2 output):
+
+```bash
+python run_score_100_llm.py
+```
+
+Then open GUI and use:
+
+- `viz/SoccerChat_valid_xfoul_abs_preds_100_scored.jsonl`
+- This is the default file expected by `viz/soccer_app_gui.py`
+
+## JSON Argument Extractor GUI
+
+```bash
+python run_json_extractor_gui.py
+```
+
+Project run order and file map:
+
+- `PROJECT_MAP.md`
