@@ -104,6 +104,32 @@ def regex_judge(question: str, gt: str, pred: str):
     return d_type, gt_d, pr_d, match
 
 
+def _ollama_call_json(prompt: str, model: str, url: str, timeout_s: int, retries: int):
+    payload = {"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0}}
+    last_err = None
+    txt = ""
+    for _ in range(max(1, retries)):
+        try:
+            r = requests.post(url, json=payload, timeout=timeout_s)
+            r.raise_for_status()
+            txt = r.json().get("response", "").strip()
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(0.2)
+    if not txt and last_err is not None:
+        return None, f"request_error:{type(last_err).__name__}"
+    if not txt:
+        return None, "empty_response"
+    try:
+        return json.loads(txt), None
+    except json.JSONDecodeError:
+        m = re.search(r"\{[\s\S]*\}", txt)
+        if not m:
+            return None, f"invalid_json:{txt[:120]}"
+        return json.loads(m.group(0)), None
+
+
 def ollama_judge(question: str, pred: str, gt: str, model: str, url: str, timeout_s: int, retries: int):
     schema = {
         "decision_type": "foul|advantage|card|spa_dogso|other",
@@ -147,34 +173,9 @@ GROUND_TRUTH:
 PREDICTION:
 {pred}
 """.strip()
-    payload = {
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0},
-    }
-    last_err = None
-    txt = ""
-    for _ in range(max(1, retries)):
-        try:
-            r = requests.post(url, json=payload, timeout=timeout_s)
-            r.raise_for_status()
-            txt = r.json().get("response", "").strip()
-            break
-        except Exception as e:
-            last_err = e
-            time.sleep(0.2)
-    if not txt and last_err is not None:
-        return None, None, None, None, f"request_error:{type(last_err).__name__}"
-    if not txt:
-        return None, None, None, None, "empty_response"
-    try:
-        obj = json.loads(txt)
-    except json.JSONDecodeError:
-        m = re.search(r"\{[\s\S]*\}", txt)
-        if not m:
-            return None, None, None, None, f"invalid_json:{txt[:120]}"
-        obj = json.loads(m.group(0))
+    obj, err = _ollama_call_json(prompt, model, url, timeout_s, retries)
+    if err:
+        return None, None, None, None, err
     decision_type = str(obj.get("decision_type", "")).strip() or None
     gt_decision = str(obj.get("gt_decision", "")).strip() or None
     pred_decision = str(obj.get("pred_decision", "")).strip() or None
@@ -184,6 +185,78 @@ PREDICTION:
         decision_match = None
     explanation = str(obj.get("explanation", "")).strip()
     return decision_type, gt_decision, pred_decision, decision_match, explanation
+
+
+def ollama_error_tag(
+    question: str,
+    gt: str,
+    pred: str,
+    decision_type,
+    gt_decision,
+    pred_decision,
+    decision_match,
+    model: str,
+    url: str,
+    timeout_s: int,
+    retries: int,
+):
+    allowed_tags = [
+        "wrong_decision",
+        "unknown_or_vague",
+        "hallucinated_details",
+        "misread_contact",
+        "misread_severity",
+        "misread_context",
+        "irrelevant_reasoning",
+        "format_issue",
+        "other",
+    ]
+    schema = {"error_tags": allowed_tags[:2], "error_summary": ""}
+
+    prompt = f"""
+You are labeling failure modes for SoccerChat referee QA.
+
+Choose 1-3 tags from this allowed list ONLY:
+{json.dumps(allowed_tags, indent=2)}
+
+Then write ONE short sentence (<=20 words) describing the main error.
+
+Use these signals if provided:
+- decision_type={decision_type}
+- gt_decision={gt_decision}
+- pred_decision={pred_decision}
+- decision_match={decision_match}
+
+Output ONLY valid JSON with schema:
+{json.dumps(schema, indent=2)}
+
+QUESTION:
+{question}
+
+GROUND_TRUTH:
+{gt}
+
+PREDICTION:
+{pred}
+""".strip()
+
+    obj, err = _ollama_call_json(prompt, model, url, timeout_s, retries)
+    if err:
+        return None, None, err
+
+    tags = obj.get("error_tags", None)
+    if not isinstance(tags, list):
+        tags = None
+    else:
+        tags = [t for t in tags if t in allowed_tags][:3]
+        if not tags:
+            tags = None
+
+    summary = obj.get("error_summary", "")
+    summary = ("" if summary is None else str(summary)).strip()
+    if len(summary.split()) > 30:
+        summary = " ".join(summary.split()[:30])
+    return tags, summary, None
 
 
 def main():
@@ -196,6 +269,7 @@ def main():
     ap.add_argument("--judge_url", default="http://localhost:11434/api/generate", help="Ollama generate URL")
     ap.add_argument("--judge_timeout_s", type=int, default=45, help="Timeout seconds per Ollama request")
     ap.add_argument("--judge_retries", type=int, default=2, help="Retries per Ollama request")
+    ap.add_argument("--ollama_error_tag", action="store_true", help="Add error_tags + error_summary per row (Ollama)")
     args = ap.parse_args()
 
     inp = Path(args.input)
@@ -236,6 +310,13 @@ def main():
             out_row["pred_decision_regex"] = pred_rx
             out_row["judge_score_regex"] = m_rx
             out_row["judge_score_llm"] = None
+            out_row["judge_score_01"] = None
+            out_row["judge_reason"] = None
+            decision_type = None
+            gt_decision = None
+            pred_decision = None
+            decision_match = None
+            explanation = None
             if args.ollama_judge:
                 print(f"[{rows+1}/{total}] judging...", flush=True)
                 decision_type, gt_decision, pred_decision, decision_match, explanation = ollama_judge(
@@ -256,6 +337,29 @@ def main():
                 # Backward-compatible columns for existing GUI sorting.
                 out_row["judge_score_01"] = decision_match
                 out_row["judge_reason"] = explanation
+
+            out_row["error_tags"] = None
+            out_row["error_summary"] = None
+            if args.ollama_error_tag:
+                print(f"[{rows+1}/{total}] tagging...", flush=True)
+                tags, summ, err = ollama_error_tag(
+                    question=q,
+                    gt=gt,
+                    pred=pred,
+                    decision_type=decision_type or out_row.get("decision_type_regex"),
+                    gt_decision=gt_decision or out_row.get("gt_decision_regex"),
+                    pred_decision=pred_decision or out_row.get("pred_decision_regex"),
+                    decision_match=decision_match if decision_match is not None else out_row.get("judge_score_regex", 0),
+                    model=args.judge_model,
+                    url=args.judge_url,
+                    timeout_s=args.judge_timeout_s,
+                    retries=args.judge_retries,
+                )
+                if err:
+                    out_row["error_summary"] = f"tagger_error:{err}"
+                else:
+                    out_row["error_tags"] = tags
+                    out_row["error_summary"] = summ
             # Combined failure score: decision mismatch dominates.
             decision_for_fail = out_row.get("judge_score_llm")
             if decision_for_fail is None:

@@ -7,6 +7,11 @@ from pathlib import Path
 def load_build_ui():
     root = Path(__file__).resolve().parent
     mod_path = root / "viz" / "json_argument_extractor_gui.py"
+    print(f"[launcher] loading: {mod_path}")
+    try:
+        print(f"[launcher] mtime: {mod_path.stat().st_mtime}")
+    except Exception:
+        pass
     spec = importlib.util.spec_from_file_location("json_argument_extractor_gui", mod_path)
     mod = importlib.util.module_from_spec(spec)
     assert spec.loader is not None

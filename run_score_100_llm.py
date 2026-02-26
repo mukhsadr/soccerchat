@@ -12,10 +12,13 @@ def main():
         "--input",
         str(root / "SoccerChat_valid_xfoul_abs_preds_100.jsonl"),
         "--output",
-        str(root / "SoccerChat_valid_xfoul_abs_preds_100_scored_v2.jsonl"),
+        str(root / "SoccerChat_valid_xfoul_abs_preds_100_scored_v4.jsonl"),
         "--group",
-        "valid_preds_100",
+        "valid_preds_100_v4",
         "--ollama_judge",
+        "--ollama_error_tag",
+        "--judge_model",
+        "llama3.2:3b",
     ]
     print("Running:\n", " ".join(cmd), flush=True)
     raise SystemExit(subprocess.call(cmd))

@@ -3,11 +3,15 @@ import json
 import re
 import html
 from pathlib import Path
+from collections import Counter
 
 import gradio as gr
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import requests
+from matplotlib import colors as mcolors
+from matplotlib.patches import Patch
 
 DEFAULT_MODEL = "llama3.2:3b"
 DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -17,8 +21,10 @@ def default_data_path() -> str:
     root = Path(__file__).resolve().parent.parent
     base = Path(__file__).parent
     cands = [
+        root / "SoccerChat_valid_xfoul_abs_preds_100_scored_v4.jsonl",
         root / "SoccerChat_valid_xfoul_abs_preds_100_scored_v2.jsonl",
         root / "SoccerChat_valid_xfoul_abs_preds_100_scored.jsonl",
+        base / "SoccerChat_valid_xfoul_abs_preds_100_scored_v4.jsonl",
         base / "SoccerChat_valid_xfoul_abs_preds_100_scored_v2.jsonl",
         base / "SoccerChat_valid_xfoul_abs_preds_100_scored.jsonl",
         base / "sanity_pack_30.jsonl",
@@ -347,14 +353,149 @@ def build_plot(df: pd.DataFrame, plot_choice: str):
         ax.set_xlim(-0.05, 1.05)
         ax.set_ylim(-0.05, 1.05)
     else:
-        if "DecisionType" not in df.columns:
+        # Option 3: grouped fail-score plot by top error-tag combinations (robust style).
+        if "FailScore" not in df.columns:
             plt.close(fig)
             return None
-        vc = df["DecisionType"].astype(str).value_counts().head(8)
-        ax.bar(vc.index.tolist(), vc.values.tolist(), color="#10b981", alpha=0.9)
-        ax.set_title("Option 3: Decision Type Count")
-        ax.set_ylabel("Count")
-        ax.tick_params(axis="x", rotation=25)
+        tag_col = "ErrorTags" if "ErrorTags" in df.columns else ("error_tags" if "error_tags" in df.columns else None)
+        if tag_col is None:
+            plt.close(fig)
+            return None
+
+        d = df.copy()
+        d["FailScore"] = pd.to_numeric(d["FailScore"], errors="coerce")
+        if "DecisionMatch" in d.columns:
+            d["decision_match_num"] = pd.to_numeric(d["DecisionMatch"], errors="coerce")
+        else:
+            d["decision_match_num"] = np.nan
+        if "Score_Regex" in d.columns:
+            d["decision_match_num"] = d["decision_match_num"].fillna(pd.to_numeric(d["Score_Regex"], errors="coerce"))
+        d = d.dropna(subset=["FailScore"]).reset_index(drop=True)
+        if len(d) == 0:
+            plt.close(fig)
+            return None
+
+        def parse_tags(v):
+            if isinstance(v, list):
+                tags = v
+            else:
+                s = str(v).strip()
+                if not s:
+                    tags = []
+                elif s.startswith("[") and s.endswith("]"):
+                    tags = [x.strip().strip("'\"") for x in s[1:-1].split(",") if x.strip()]
+                else:
+                    for sep in [",", ";", "|", "+"]:
+                        if sep in s:
+                            tags = [t.strip() for t in s.split(sep) if t.strip()]
+                            break
+                    else:
+                        tags = [s]
+            return [str(t).strip() for t in tags if str(t).strip()]
+
+        def two_line_label(group_name):
+            if group_name == "other":
+                return "other\n(mixed)"
+            if group_name == "no_tag":
+                return "no_tag\n(n/a)"
+            parts = [x.strip() for x in str(group_name).split("+") if x.strip()]
+            if len(parts) == 0:
+                return "no_tag\n(n/a)"
+            if len(parts) == 1:
+                return f"{parts[0]}\n(n/a)"
+            return f"{parts[0]}\n{parts[1]}"
+
+        combo_list = []
+        for v in d[tag_col].tolist():
+            tags = sorted(set(parse_tags(v)))
+            combo_list.append(" + ".join(tags) if tags else "no_tag")
+        d["error_combo"] = combo_list
+
+        # Keep this style stable with notebook version.
+        top_groups = 3
+        legend_loc = "upper right"
+        xtick_every = 10
+        only_decision_failed = False
+        min_fail_score = None
+
+        if only_decision_failed:
+            d = d[d["decision_match_num"] == 0].copy()
+        if min_fail_score is not None:
+            d = d[d["FailScore"] >= float(min_fail_score)].copy()
+        if len(d) == 0:
+            plt.close(fig)
+            return None
+
+        keep = [k for k, _ in Counter(d["error_combo"].tolist()).most_common(top_groups)]
+        d["combo_group"] = d["error_combo"].apply(lambda x: x if x in keep else "other")
+        group_order = keep + (["other"] if (d["combo_group"] == "other").any() else [])
+
+        parts = []
+        for g in group_order:
+            sub = d[d["combo_group"] == g].sort_values("FailScore", ascending=False).copy()
+            sub["group"] = g
+            parts.append(sub)
+        plot_df = pd.concat(parts, axis=0).reset_index(drop=True)
+        vals = plot_df["FailScore"].to_numpy()
+        if len(vals) == 0:
+            plt.close(fig)
+            return None
+
+        plt.close(fig)
+        fig, ax = plt.subplots(figsize=(11.6, 4.8))
+        vmin, vmax = float(np.nanmin(vals)), float(np.nanmax(vals))
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        cmap = plt.cm.RdYlGn_r
+        bar_colors = cmap(norm(vals))
+        n = len(vals)
+
+        ax.bar(np.arange(n), vals, color=bar_colors, edgecolor="white", linewidth=0.25)
+        ax.set_ylim(0, max(vmax * 1.14, 2.5))
+
+        start = 0
+        legend_rows = []
+        for i, g in enumerate(group_order):
+            m = int((plot_df["group"] == g).sum())
+            if m == 0:
+                continue
+            end = start + m
+            mid = (start + end - 1) / 2
+            y = ax.get_ylim()[1] * (0.98 if i % 2 == 0 else 0.93)
+            ax.text(
+                mid,
+                y,
+                f"G{i+1}\n(n={m})",
+                ha="center",
+                va="top",
+                fontsize=8,
+                bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.7),
+            )
+            if end < n:
+                ax.axvline(end - 0.5, color="#475569", linestyle="--", linewidth=1.0, alpha=0.85)
+            legend_rows.append((f"G{i+1}", two_line_label(g), m))
+            start = end
+
+        ax.set_title("Grouped Fail-Score Distribution (top error-tag combos)", fontsize=12, pad=10)
+        ax.set_xlabel("Case index (sorted within group by fail_score)", fontsize=10)
+        ax.set_ylabel("Fail score (higher = worse)", fontsize=10)
+        xt = np.arange(0, n, xtick_every)
+        ax.set_xticks(xt)
+        ax.set_xticklabels([str(i) for i in xt], fontsize=8)
+        ax.grid(axis="y", linestyle="--", alpha=0.25)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+        sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=ax, pad=0.01)
+        cbar.set_label("Fail score (low=green -> high=red)", fontsize=8)
+        cbar.ax.tick_params(labelsize=8)
+
+        handles = []
+        for gid, gtext, m in legend_rows:
+            label = f"{gid}: {gtext.replace(chr(10), ' / ')} (n={m})"
+            handles.append(Patch(facecolor="none", edgecolor="none", label=label))
+        ax.legend(handles=handles, loc=legend_loc, frameon=True, fontsize=8, title="Group mapping")
 
     ax.grid(axis="y", linestyle="--", alpha=0.2)
     ax.spines["top"].set_visible(False)
@@ -392,7 +533,21 @@ def run(request_text, model, ollama_url, manual_json, plot_choice):
         out["question"] = out["query"].astype(str).apply(clean_question)
 
     # Compact table by default.
-    show_cols = [c for c in ["question", "gt", "pred", "judge_score_llm", "judge_score_regex", "fail_score", "decision_type_regex"] if c in out.columns]
+    show_cols = [
+        c
+        for c in [
+            "question",
+            "gt",
+            "pred",
+            "judge_score_llm",
+            "judge_score_regex",
+            "fail_score",
+            "decision_type_regex",
+            "error_tags",
+            "error_summary",
+        ]
+        if c in out.columns
+    ]
     if not show_cols:
         show_cols = list(out.columns[:12])
     llm_non_null = None
@@ -414,13 +569,29 @@ def run(request_text, model, ollama_url, manual_json, plot_choice):
     for src, dst in [("question", "question_short"), ("gt", "gt_short"), ("pred", "pred_short")]:
         if src in table_df.columns:
             table_df[dst] = table_df[src].astype(str).apply(lambda x: (x[:220] + "...") if len(x) > 220 else x)
-    compact_cols = [c for c in ["question_short", "gt_short", "pred_short", "judge_score_llm", "judge_score_regex", "fail_score"] if c in table_df.columns]
+    compact_cols = [
+        c
+        for c in [
+            "question_short",
+            "gt_short",
+            "pred_short",
+            "judge_score_llm",
+            "judge_score_regex",
+            "fail_score",
+            "error_tags",
+            "error_summary",
+            "decision_match",
+        ]
+        if c in table_df.columns
+    ]
     table_df = table_df[compact_cols]
     rename_map = {
         "question_short": "Q",
         "gt_short": "GT",
         "pred_short": "Pred",
         "decision_type_regex": "DecisionType",
+        "error_tags": "ErrorTags",
+        "error_summary": "ErrorSummary",
         "judge_score_llm": "Score_LLM",
         "judge_score_regex": "Score_Regex",
         "decision_match": "DecisionMatch",
@@ -477,7 +648,7 @@ def run_ui(*args):
 
 
 def initial_run(model, ollama_url, manual_json, plot_choice):
-    default_request = "show top 100 by judge_score_01"
+    default_request = "show top 100 by fail_score"
     return run_ui(default_request, model, ollama_url, manual_json, plot_choice)
 
 
@@ -545,7 +716,7 @@ def build_ui():
             with gr.Column(scale=1, min_width=240):
                 request_text = gr.Textbox(
                     label="Request",
-                    value="show top 100 by judge_score_01",
+                    value="show top 100 by fail_score",
                     lines=3,
                 )
                 run_btn = gr.Button("Extract + Apply", variant="primary")
@@ -556,18 +727,17 @@ def build_ui():
             with gr.Column(scale=3, min_width=860):
                 caption = gr.Markdown("### Filtered Cases: 0 / 0")
                 table = gr.Dataframe(label="Filtered Table (Plain)", wrap=True)
+                preview = gr.Markdown("No data yet.")
                 with gr.Accordion("Optional Heat View", open=False):
                     heat_table = gr.HTML(label="Row color by FailScore")
-                with gr.Accordion("Top 3 Rows (Readable)", open=False):
-                    preview = gr.Markdown("No data yet.")
                 with gr.Accordion("Parsed Arguments JSON", open=False):
                     parsed = gr.Code(label="", language="json")
                 with gr.Accordion("Plots (Last)", open=False):
                     plot_choice = gr.Dropdown(
                         label="Plot Type",
                         choices=["1", "2", "3"],
-                        value="1",
-                        info="1=FailScore, 2=LLM vs Regex, 3=DecisionType count",
+                        value="3",
+                        info="1=FailScore, 2=LLM vs Regex, 3=Grouped fail by top error-tag combos",
                     )
                     plot_view = gr.Plot(label="Plot")
         run_btn.click(

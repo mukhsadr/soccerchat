@@ -138,6 +138,16 @@ Fail-score bar chart:
 
 ![Fail Score Bar Chart](docs/images/barchart.png)
 
+
+Grouped fail-score chart (top error-tag combinations):
+
+![Grouped Fail Score Chart](docs/images/group_bar.png)
+
+What we found from grouped error-combo view:
+- Cases cluster into a small number of repeated error-tag combinations.
+- The largest group is dominated by `wrong_decision` with context/severity issues.
+- Grouped sorting helps prioritize failure families, not only single worst rows.
+
 The fail-score plot uses a green-to-red range:
 - green = lower fail score (better alignment with GT)
 - red = higher fail score (worse cases to inspect first)
