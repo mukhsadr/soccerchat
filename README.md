@@ -106,6 +106,16 @@ Then open GUI and use:
 python run_json_extractor_gui.py
 ```
 
+### UI Screenshots
+
+Plain top table:
+
+![Plain Top Table](docs/images/image.png)
+
+Heat table view:
+
+![Heat Table](docs/images/heattable.png)
+
 Project run order and file map:
 
 - `PROJECT_MAP.md`
