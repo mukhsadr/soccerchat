@@ -270,7 +270,7 @@ def resolve_data_path(data_path):
     return data_path
 
 
-def run(request_text, model, ollama_url, manual_json, plot_col, plot_col2):
+def run(request_text, model, ollama_url, manual_json):
     actual_path = default_data_path()
     df = load_df(actual_path)
     cols = list(df.columns)
@@ -382,9 +382,9 @@ def run_ui(*args):
         return "{}", "### Filtered Cases: 0 / 0", "<div>Error</div>", f"### Error\n{type(e).__name__}: {e}", pd.DataFrame()
 
 
-def initial_run(model, ollama_url, manual_json, plot_col, plot_col2):
+def initial_run(model, ollama_url, manual_json):
     default_request = "show top 100 by judge_score_01"
-    return run_ui(default_request, model, ollama_url, manual_json, plot_col, plot_col2)
+    return run_ui(default_request, model, ollama_url, manual_json)
 
 
 def build_fail_heat_table_html(df: pd.DataFrame) -> str:
@@ -458,8 +458,6 @@ def build_ui():
                 with gr.Accordion("Advanced (optional)", open=False):
                     model = gr.Textbox(label="Ollama model", value=DEFAULT_MODEL)
                     ollama_url = gr.Textbox(label="Ollama URL", value=DEFAULT_OLLAMA_URL)
-                    plot_col = gr.Textbox(label="Plot column 1", value="judge_score_01")
-                    plot_col2 = gr.Textbox(label="Plot column 2 (optional)", value="token_f1")
                     manual_json = gr.Textbox(label="Manual JSON override", lines=8)
             with gr.Column(scale=3, min_width=860):
                 caption = gr.Markdown("### Filtered Cases: 0 / 0")
@@ -472,12 +470,12 @@ def build_ui():
                     parsed = gr.Code(label="", language="json")
         run_btn.click(
             fn=run_ui,
-            inputs=[request_text, model, ollama_url, manual_json, plot_col, plot_col2],
+            inputs=[request_text, model, ollama_url, manual_json],
             outputs=[parsed, caption, heat_table, preview, table],
         )
         app.load(
             fn=initial_run,
-            inputs=[model, ollama_url, manual_json, plot_col, plot_col2],
+            inputs=[model, ollama_url, manual_json],
             outputs=[parsed, caption, heat_table, preview, table],
         )
     return app
