@@ -39,6 +39,24 @@ Test run first: we ran `test va`, which predicts the next token.
 
 ![Test run output](testrun.png)
 
+## Progress Timeline
+
+- February 23, 2026: First test run completed; next-token behavior and baseline outputs reviewed.
+- February 25, 2026: Built 100-case scoring pipeline (`token_f1`, `rougeL_f1`, LLM judge, regex judge).
+- February 25, 2026: Added fail-case ranking with combined `fail_score`.
+- February 25, 2026: Added JSON argument extractor GUI and plain top table + heat-table view.
+
+## Fail-Case Method
+
+We prioritize failing examples using:
+
+`fail_score = (1 - decision_match)*2 + (1 - token_f1) + (1 - rougeL_f1)`
+
+Interpretation:
+
+- Higher `fail_score` = worse case (more likely decision error / weak alignment with GT).
+- Lower `fail_score` = better case.
+
 ## De-Risking Checklist (Dr. Landman Style)
 
 - [x] Model runs end-to-end on a small sample
@@ -116,6 +134,21 @@ Heat table view:
 
 ![Heat Table](docs/images/heattable.png)
 
+Fail-score bar chart:
+
+![Fail Score Bar Chart](docs/images/barchart.png)
+
+The fail-score plot uses a green-to-red range:
+- green = lower fail score (better alignment with GT)
+- red = higher fail score (worse cases to inspect first)
+
 Project run order and file map:
 
 - `PROJECT_MAP.md`
+
+## What We Found (100-Case Scored Set)
+
+- Scored cases: 97 (numeric fail score available)
+- Higher fail score bars (red): 63 / 97
+- Lower fail score bars (green): 34 / 97
+- Interpretation: red bars are priority error-analysis cases; green bars are stronger prediction/GT agreement.

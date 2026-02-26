@@ -270,7 +270,100 @@ def resolve_data_path(data_path):
     return data_path
 
 
-def run(request_text, model, ollama_url, manual_json):
+def build_plot(df: pd.DataFrame, plot_choice: str):
+    if len(df) == 0:
+        return None
+    c = s(plot_choice).strip()
+    fig, ax = plt.subplots(figsize=(8.2, 3.0))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    if c == "1":
+        if "FailScore" not in df.columns:
+            plt.close(fig)
+            return None
+        d = df.copy()
+        d["FailScore"] = pd.to_numeric(d["FailScore"], errors="coerce")
+        d = d.dropna(subset=["FailScore"]).reset_index(drop=True)
+        if len(d) == 0:
+            plt.close(fig)
+            return None
+        vals = d["FailScore"].tolist()
+        mn, mx = min(vals), max(vals)
+        denom = (mx - mn) if mx > mn else 1.0
+        # low fail -> green, high fail -> red
+        colors = [(v - mn) / denom for v in vals]
+        ax.bar(range(len(d)), vals, color=plt.cm.RdYlGn_r(colors), edgecolor="white", linewidth=0.3, alpha=0.92)
+        ax.set_title(f"SoccerChat VLM Evaluation on {len(d)} Video Data Points", fontsize=13, pad=14)
+        ax.set_xlabel(
+            "Each bar = one case. decision_match: exact decision correct (0/1);\n"
+            "token_f1: token overlap between prediction and ground truth;\n"
+            "rougeL_f1: sequence-level overlap (longest common subsequence) F1.",
+            fontsize=10,
+            labelpad=10,
+        )
+        ax.set_ylabel(
+            "Fail Score (higher = worse)\n"
+            "(1-decision_match)*2 + (1-token_f1) + (1-rougeL_f1)",
+            fontsize=10,
+        )
+        xt = list(range(0, len(d), 10))
+        ax.set_xticks(xt)
+        ax.set_xticklabels([str(i) for i in xt], fontsize=9)
+        cbar = fig.colorbar(plt.cm.ScalarMappable(cmap=plt.cm.RdYlGn_r), ax=ax, pad=0.01)
+        cbar.set_label("Low fail (green)  ->  High fail (red)", fontsize=8)
+        cbar.ax.tick_params(labelsize=8)
+    elif c == "2":
+        if ("Score_LLM" not in df.columns) or ("Score_Regex" not in df.columns):
+            plt.close(fig)
+            return None
+        d = df.copy()
+        d["Score_LLM"] = pd.to_numeric(d["Score_LLM"], errors="coerce")
+        d["Score_Regex"] = pd.to_numeric(d["Score_Regex"], errors="coerce")
+        if "FailScore" in d.columns:
+            d["FailScore"] = pd.to_numeric(d["FailScore"], errors="coerce")
+        d = d.dropna(subset=["Score_LLM", "Score_Regex"])
+        if len(d) == 0:
+            plt.close(fig)
+            return None
+        if "FailScore" in d.columns and d["FailScore"].notna().any():
+            mn = float(d["FailScore"].min())
+            mx = float(d["FailScore"].max())
+            denom = (mx - mn) if mx > mn else 1.0
+            norm_vals = (d["FailScore"] - mn) / denom
+            sc = ax.scatter(
+                d["Score_Regex"], d["Score_LLM"],
+                c=norm_vals, cmap=plt.cm.RdYlGn_r, s=36, alpha=0.85
+            )
+            cbar = fig.colorbar(sc, ax=ax, pad=0.01)
+            cbar.set_label("Low fail  →  High fail", fontsize=8)
+            cbar.ax.tick_params(labelsize=8)
+            ax.set_title("Option 2: LLM vs Regex (color by FailScore)")
+        else:
+            ax.scatter(d["Score_Regex"], d["Score_LLM"], s=36, alpha=0.8, color="#2563eb")
+            ax.set_title("Option 2: LLM vs Regex")
+        ax.set_xlabel("Score_Regex")
+        ax.set_ylabel("Score_LLM")
+        ax.set_xlim(-0.05, 1.05)
+        ax.set_ylim(-0.05, 1.05)
+    else:
+        if "DecisionType" not in df.columns:
+            plt.close(fig)
+            return None
+        vc = df["DecisionType"].astype(str).value_counts().head(8)
+        ax.bar(vc.index.tolist(), vc.values.tolist(), color="#10b981", alpha=0.9)
+        ax.set_title("Option 3: Decision Type Count")
+        ax.set_ylabel("Count")
+        ax.tick_params(axis="x", rotation=25)
+
+    ax.grid(axis="y", linestyle="--", alpha=0.2)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    return fig
+
+
+def run(request_text, model, ollama_url, manual_json, plot_choice):
     actual_path = default_data_path()
     df = load_df(actual_path)
     cols = list(df.columns)
@@ -370,21 +463,22 @@ def run(request_text, model, ollama_url, manual_json):
         preview_lines.append("---")
     preview_md = "\n".join(preview_lines)
 
+    plot_fig = build_plot(table_df, plot_choice)
     heat_html = build_fail_heat_table_html(table_df)
     caption_md = f"### Filtered Cases: {len(table_df)} / {len(df)}"
-    return json.dumps(args, indent=2), caption_md, heat_html, preview_md, table_df
+    return json.dumps(args, indent=2), caption_md, plot_fig, heat_html, preview_md, table_df
 
 
 def run_ui(*args):
     try:
         return run(*args)
     except Exception as e:
-        return "{}", "### Filtered Cases: 0 / 0", "<div>Error</div>", f"### Error\n{type(e).__name__}: {e}", pd.DataFrame()
+        return "{}", "### Filtered Cases: 0 / 0", None, "<div>Error</div>", f"### Error\n{type(e).__name__}: {e}", pd.DataFrame()
 
 
-def initial_run(model, ollama_url, manual_json):
+def initial_run(model, ollama_url, manual_json, plot_choice):
     default_request = "show top 100 by judge_score_01"
-    return run_ui(default_request, model, ollama_url, manual_json)
+    return run_ui(default_request, model, ollama_url, manual_json, plot_choice)
 
 
 def build_fail_heat_table_html(df: pd.DataFrame) -> str:
@@ -468,15 +562,23 @@ def build_ui():
                     preview = gr.Markdown("No data yet.")
                 with gr.Accordion("Parsed Arguments JSON", open=False):
                     parsed = gr.Code(label="", language="json")
+                with gr.Accordion("Plots (Last)", open=False):
+                    plot_choice = gr.Dropdown(
+                        label="Plot Type",
+                        choices=["1", "2", "3"],
+                        value="1",
+                        info="1=FailScore, 2=LLM vs Regex, 3=DecisionType count",
+                    )
+                    plot_view = gr.Plot(label="Plot")
         run_btn.click(
             fn=run_ui,
-            inputs=[request_text, model, ollama_url, manual_json],
-            outputs=[parsed, caption, heat_table, preview, table],
+            inputs=[request_text, model, ollama_url, manual_json, plot_choice],
+            outputs=[parsed, caption, plot_view, heat_table, preview, table],
         )
         app.load(
             fn=initial_run,
-            inputs=[model, ollama_url, manual_json],
-            outputs=[parsed, caption, heat_table, preview, table],
+            inputs=[model, ollama_url, manual_json, plot_choice],
+            outputs=[parsed, caption, plot_view, heat_table, preview, table],
         )
     return app
 
