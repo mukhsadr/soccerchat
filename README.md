@@ -1,8 +1,8 @@
 # SoccerChat
 
-## Main Chat Screenshot
+## Main Chat Demo
 
-![SoccerChat main UI](docs/chatmain.png)
+![SoccerChat live demo](docs/chatdemo.gif)
 
 ## Description
 SoccerChat lets users ask questions about uploaded soccer game video clips.
